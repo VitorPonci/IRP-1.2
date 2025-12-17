@@ -1,45 +1,112 @@
-Sub FiltrarTabelaDinamicaPorMunicipios()
-    Dim pt As PivotTable
-    Dim pf As PivotField
-    Dim municipiosFiltro As Object
-    Dim wsLista As Worksheet
-    Dim cel As Range
-    Dim campoMunicipio As String
-    Dim item As PivotItem
-    Dim municipioNome As String
+Sub CalcularProporcaoIndividualPorBacia()
 
-    ' Nome do campo da Tabela Dinâmica
-    campoMunicipio = "Município"   ' Use exatamente como aparece na sua tabela dinâmica
+    Dim wsFonte As Worksheet
+    Dim wsDestino As Worksheet
+    Dim ultimaLinha As Long
+    Dim i As Long
+    Dim anoAtual As Variant
+    Dim bacia As String
+    Dim producao As Double
 
-    ' Aba com a lista dos municípios (apenas os nomes na coluna A)
-    Set wsLista = ThisWorkbook.Sheets("ListaMunicipios")
+    Dim dictTotalGeral As Object
+    Dim dictCampos As Object, dictSantos As Object, dictES As Object
 
-    ' Pega a primeira Tabela Dinâmica da planilha ativa
-    Set pt = ActiveSheet.PivotTables(1)
-    Set pf = pt.PivotFields(campoMunicipio)
+    Dim linhaDestino As Long
 
-    ' Monta dicionário dos municípios desejados
-    Set municipiosFiltro = CreateObject("Scripting.Dictionary")
-    For Each cel In wsLista.Range("A1", wsLista.Cells(wsLista.Rows.Count, 1).End(xlUp))
-        If Trim(cel.Value) <> "" Then
-            municipiosFiltro(UCase(Trim(cel.Value))) = 1
+    Set wsFonte = ThisWorkbook.Sheets("Produção Por Bacia")
+    Set wsDestino = ThisWorkbook.Sheets("Graficos")
+
+    Set dictTotalGeral = CreateObject("Scripting.Dictionary")
+    Set dictCampos = CreateObject("Scripting.Dictionary")
+    Set dictSantos = CreateObject("Scripting.Dictionary")
+    Set dictES = CreateObject("Scripting.Dictionary")
+
+    ultimaLinha = wsFonte.Cells(wsFonte.Rows.Count, 1).End(xlUp).Row
+
+    ' Limpa dados antigos
+    wsDestino.Range("A2:H1000").ClearContents
+    wsDestino.Range("I:I").Clear
+
+    ' Preencher dicionários com dados
+    For i = 2 To ultimaLinha
+        If IsNumeric(wsFonte.Cells(i, 1).Value) Then
+            anoAtual = wsFonte.Cells(i, 1).Value
+            bacia = Trim(wsFonte.Cells(i, 2).Value)
+            producao = Val(wsFonte.Cells(i, 5).Value)
+
+            If bacia = "Total Geral" Then
+                dictTotalGeral(anoAtual) = producao
+            Else
+                Select Case bacia
+                    Case "Campos"
+                        If Not dictCampos.exists(anoAtual) Then dictCampos(anoAtual) = 0
+                        dictCampos(anoAtual) = dictCampos(anoAtual) + producao
+                    Case "Santos"
+                        If Not dictSantos.exists(anoAtual) Then dictSantos(anoAtual) = 0
+                        dictSantos(anoAtual) = dictSantos(anoAtual) + producao
+                    Case "Espírito Santo"
+                        If Not dictES.exists(anoAtual) Then dictES(anoAtual) = 0
+                        dictES(anoAtual) = dictES(anoAtual) + producao
+                End Select
+            End If
         End If
-    Next cel
+    Next i
 
-    Application.ScreenUpdating = False
-    pf.ClearAllFilters
-    pf.EnableMultiplePageItems = True
+    ' Cabeçalho
+    wsDestino.Range("A1:H1").Value = Array("Ano", "Campos", "Santos", "Espírito Santo", _
+                                           "Total Geral", "Prop. Campos", "Prop. Santos", "Prop. Espírito Santo")
 
-    ' Tenta marcar só os municípios da lista
-    For Each item In pf.PivotItems
-        municipioNome = UCase(Trim(item.Name))
-        On Error Resume Next
-        item.Visible = municipiosFiltro.Exists(municipioNome)
-        On Error GoTo 0
-    Next item
+    linhaDestino = 2
+    For Each anoAtual In dictTotalGeral.Keys
+        Dim camposVal As Double, santosVal As Double, esVal As Double
+        camposVal = 0: santosVal = 0: esVal = 0
 
-    Application.ScreenUpdating = True
+        If dictCampos.exists(anoAtual) Then camposVal = dictCampos(anoAtual)
+        If dictSantos.exists(anoAtual) Then santosVal = dictSantos(anoAtual)
+        If dictES.exists(anoAtual) Then esVal = dictES(anoAtual)
 
-    MsgBox "Filtro aplicado com sucesso!", vbInformation
+        Dim totalVal As Double
+        totalVal = dictTotalGeral(anoAtual)
+
+        ' Preencher valores
+        wsDestino.Cells(linhaDestino, 1).Value = anoAtual
+        wsDestino.Cells(linhaDestino, 2).Value = camposVal
+        wsDestino.Cells(linhaDestino, 3).Value = santosVal
+        wsDestino.Cells(linhaDestino, 4).Value = esVal
+        wsDestino.Cells(linhaDestino, 5).Value = totalVal
+
+        If totalVal <> 0 Then
+            wsDestino.Cells(linhaDestino, 6).Value = camposVal / totalVal
+            wsDestino.Cells(linhaDestino, 7).Value = santosVal / totalVal
+            wsDestino.Cells(linhaDestino, 8).Value = esVal / totalVal
+
+            wsDestino.Range(wsDestino.Cells(linhaDestino, 6), wsDestino.Cells(linhaDestino, 8)).NumberFormat = "0.00%"
+        End If
+
+        ' Aplica formatação alternada (linhas 2 e 3 como referência)
+        If linhaDestino > 3 Then
+            Dim fonteLinha As Long
+            fonteLinha = 2 + ((linhaDestino - 2) Mod 2) ' alterna entre 2 e 3
+            wsDestino.Range("A" & fonteLinha & ":H" & fonteLinha).Copy
+            wsDestino.Range("A" & linhaDestino & ":H" & linhaDestino).PasteSpecial Paste:=xlPasteFormats
+            Application.CutCopyMode = False
+        End If
+
+        linhaDestino = linhaDestino + 1
+    Next
+
+    MsgBox "Proporções individuais calculadas com sucesso!"
+
 End Sub
+
+
+
+
+
+
+
+
+
+
+
 
