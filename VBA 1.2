@@ -1,0 +1,45 @@
+Sub FiltrarTabelaDinamicaPorMunicipios()
+    Dim pt As PivotTable
+    Dim pf As PivotField
+    Dim municipiosFiltro As Object
+    Dim wsLista As Worksheet
+    Dim cel As Range
+    Dim campoMunicipio As String
+    Dim item As PivotItem
+    Dim municipioNome As String
+
+    ' Nome do campo da Tabela Dinâmica
+    campoMunicipio = "Município"   ' Use exatamente como aparece na sua tabela dinâmica
+
+    ' Aba com a lista dos municípios (apenas os nomes na coluna A)
+    Set wsLista = ThisWorkbook.Sheets("ListaMunicipios")
+
+    ' Pega a primeira Tabela Dinâmica da planilha ativa
+    Set pt = ActiveSheet.PivotTables(1)
+    Set pf = pt.PivotFields(campoMunicipio)
+
+    ' Monta dicionário dos municípios desejados
+    Set municipiosFiltro = CreateObject("Scripting.Dictionary")
+    For Each cel In wsLista.Range("A1", wsLista.Cells(wsLista.Rows.Count, 1).End(xlUp))
+        If Trim(cel.Value) <> "" Then
+            municipiosFiltro(UCase(Trim(cel.Value))) = 1
+        End If
+    Next cel
+
+    Application.ScreenUpdating = False
+    pf.ClearAllFilters
+    pf.EnableMultiplePageItems = True
+
+    ' Tenta marcar só os municípios da lista
+    For Each item In pf.PivotItems
+        municipioNome = UCase(Trim(item.Name))
+        On Error Resume Next
+        item.Visible = municipiosFiltro.Exists(municipioNome)
+        On Error GoTo 0
+    Next item
+
+    Application.ScreenUpdating = True
+
+    MsgBox "Filtro aplicado com sucesso!", vbInformation
+End Sub
+
